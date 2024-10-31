@@ -10,7 +10,7 @@ connectDB();
 const app = express();
 app.use(express.json());
 
-// Welcome route
+
 app.get('/', (req, res) => {
   res.send('Welcome to my Task Manager App!');
 });
