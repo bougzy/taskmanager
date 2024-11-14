@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { validationResult } = require('express-validator');
 const asyncHandler = require('express-async-handler');
 
 // Generate JWT
@@ -9,15 +10,16 @@ const generateToken = (id) => {
 
 // Register a new user
 exports.registerUser = asyncHandler(async (req, res) => {
-  const { username, password } = req.body;
-
-  if (!username || !password) {
-    return res.status(400).json({ message: 'Please provide all required fields' });
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
   }
+
+  const { username, password } = req.body;
 
   const userExists = await User.findOne({ username });
   if (userExists) {
-    return res.status(400).json({ message: 'User already exists' });
+    return res.status(400).json({ success: false, message: 'User already exists' });
   }
 
   const user = await User.create({ username, password });
@@ -33,6 +35,11 @@ exports.registerUser = asyncHandler(async (req, res) => {
 
 // Login a user
 exports.loginUser = asyncHandler(async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ success: false, errors: errors.array() });
+  }
+
   const { username, password } = req.body;
 
   const user = await User.findOne({ username });
@@ -46,6 +53,6 @@ exports.loginUser = asyncHandler(async (req, res) => {
       },
     });
   } else {
-    res.status(401).json({ message: 'Invalid credentials' });
+    res.status(401).json({ success: false, message: 'Invalid credentials' });
   }
 });

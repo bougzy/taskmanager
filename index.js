@@ -16,9 +16,16 @@ app.get('/', (req, res) => {
   res.send('Welcome to my Task Manager App!');
 });
 
+// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', protect, taskRoutes);
 
+// Handle undefined routes
+app.use((req, res, next) => {
+  res.status(404).json({ success: false, message: 'Route not found' });
+});
+
+// Error Handler Middleware
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 8000;
