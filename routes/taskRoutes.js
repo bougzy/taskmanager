@@ -9,7 +9,7 @@ router.post(
   [check('title', 'Task title is required').notEmpty()],
   createTask
 );
-router.get('/', getTasks);
+router.get('/', getTasks); // Example: /tasks?page=1&limit=20
 router.get('/:id', getTaskById);
 router.put(
   '/:id',
