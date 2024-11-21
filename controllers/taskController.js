@@ -1,4 +1,5 @@
 const Task = require('../models/Task');
+const nodemailer = require('nodemailer'); // For email notifications
 const redis = require('redis');
 
 // Initialize Redis client
@@ -6,20 +7,16 @@ const redisClient = redis.createClient();
 
 redisClient.on('error', (err) => console.error('Redis error:', err));
 
-// Create a new task
-exports.createTask = async (req, res) => {
-  try {
-    const task = await Task.create(req.body);
-    res.status(201).json({ success: true, data: task });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
-  }
-};
-
-// Get tasks with pagination and caching
+// Filter and Fetch Tasks
 exports.getTasks = async (req, res) => {
-  const { page = 1, limit = 20 } = req.query;
-  const cacheKey = `tasks:${page}:${limit}`;
+  const { status, priority, tags, page = 1, limit = 20 } = req.query;
+  const query = {};
+  const cacheKey = `tasks:${JSON.stringify(req.query)}`;
+
+  // Build query filters
+  if (status) query.completed = status === 'completed';
+  if (priority) query.priority = priority;
+  if (tags) query.tags = { $all: tags.split(',') }; // Match all tags
 
   try {
     // Check Redis cache
@@ -29,12 +26,12 @@ exports.getTasks = async (req, res) => {
       }
 
       // Fetch tasks from DB
-      const tasks = await Task.find()
-        .sort({ createdAt: -1 }) // Sort by latest tasks
+      const tasks = await Task.find(query)
+        .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(Number(limit));
 
-      const totalTasks = await Task.countDocuments();
+      const totalTasks = await Task.countDocuments(query);
 
       const response = {
         success: true,
@@ -47,7 +44,7 @@ exports.getTasks = async (req, res) => {
       };
 
       // Cache the response
-      redisClient.setex(cacheKey, 3600, JSON.stringify(response)); 
+      redisClient.setex(cacheKey, 3600, JSON.stringify(response)); // Cache for 1 hour
       res.status(200).json(response);
     });
   } catch (error) {
@@ -55,35 +52,51 @@ exports.getTasks = async (req, res) => {
   }
 };
 
-// Get a single task by ID
-exports.getTaskById = async (req, res) => {
-  try {
-    const task = await Task.findById(req.params.id);
-    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
-    res.status(200).json({ success: true, data: task });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Error fetching task' });
-  }
-};
+// Share Task with Other Users
+exports.shareTask = async (req, res) => {
+  const { taskId, emails } = req.body;
 
-// Update a task
-exports.updateTask = async (req, res) => {
-  try {
-    const task = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
-    res.status(200).json({ success: true, data: task });
-  } catch (error) {
-    res.status(400).json({ success: false, message: error.message });
+  if (!emails || !Array.isArray(emails) || emails.length === 0) {
+    return res.status(400).json({ success: false, message: 'Emails are required' });
   }
-};
 
-// Delete a task
-exports.deleteTask = async (req, res) => {
   try {
-    const task = await Task.findByIdAndDelete(req.params.id);
-    if (!task) return res.status(404).json({ success: false, message: 'Task not found' });
-    res.status(200).json({ success: true, data: {} });
+    const task = await Task.findById(taskId);
+
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Task not found' });
+    }
+
+    // Update the task with shared emails
+    task.sharedWith.push(...emails);
+    await task.save();
+
+    // Send email notifications (optional)
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: emails,
+      subject: 'Task Shared With You',
+      text: `A task titled "${task.title}" has been shared with you.`,
+    };
+
+    transporter.sendMail(mailOptions, (err, info) => {
+      if (err) {
+        console.error('Error sending emails:', err);
+      } else {
+        console.log('Emails sent:', info.response);
+      }
+    });
+
+    res.status(200).json({ success: true, message: 'Task shared successfully', data: task });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error deleting task' });
+    res.status(500).json({ success: false, message: error.message });
   }
 };

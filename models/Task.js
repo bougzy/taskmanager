@@ -11,12 +11,25 @@ const taskSchema = new mongoose.Schema(
     },
     deadline: {
       type: Date,
-      index: true, 
+      index: true,
     },
     completed: {
       type: Boolean,
       default: false,
-      index: true, 
+      index: true,
+    },
+    priority: {
+      type: String,
+      enum: ['low', 'medium', 'high'],
+      default: 'medium',
+    },
+    tags: {
+      type: [String], 
+      default: [],
+    },
+    sharedWith: {
+      type: [String], 
+      default: [],
     },
   },
   { timestamps: true }
